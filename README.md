@@ -1,0 +1,126 @@
+# Claude Code Usage
+
+A native macOS **menu-bar app** that shows what your Claude Code usage costs —
+**today's spend** and **month-to-date** (resetting on a configurable day,
+the 1st by default) — at a glance, with a detailed breakdown in the dropdown.
+
+```
+$4.79 ▸ $129.77
+```
+
+It works no matter where you run Claude Code — direct terminal, Cursor, IDE
+extension — because every session writes its token usage to
+`~/.claude/projects/**/*.jsonl`, and that is the single source this app reads.
+
+## Features
+
+- **Menu bar:** today's spend ▸ month-to-date.
+- **Projected month total** — extrapolated from your daily burn rate.
+- **Pace indicator** — today vs. your average active day (↑ above / ↓ below).
+- **Monthly budget bar** — spend vs. a configurable cap, on a configurable
+  billing-cycle reset day (Settings ▸ General).
+- **By-model breakdown** for the month (Opus / Sonnet / Haiku / Fable).
+- **Top projects today** — derived from each session's working directory.
+- **14-day sparkline** (`▁▂▃▄▅▆▇█`) plus a last-7-days total.
+- **Tokens in / out today.**
+- **Tier ladder** in the menu bar (e.g. medals up to 💎, then 💩 past budget) —
+  pick a ladder and edit each step's name/emoji/threshold in Settings ▸ Tier
+  Theme.
+- **Settings window** (Settings… in the popover footer): plan, launch at
+  login, monthly budget, billing-cycle reset day, tier ladder.
+- **Launches at login** automatically (native login item; toggle in Settings).
+- No dock icon (menu-bar only). No Python, no background daemon — one Swift binary.
+
+## Requirements
+
+- macOS 13 (Ventura) or later.
+- Xcode Command Line Tools (for the Swift toolchain): `xcode-select --install`.
+  Unit tests need full Xcode (XCTest isn't in the CLT); `check.sh` skips them
+  locally without it and they still run in CI.
+
+## Install
+
+```sh
+git clone <your-repo-url> claude-code-usage   # or just use this folder
+cd claude-code-usage
+./install.sh
+```
+
+This compiles the app, installs it to `~/Applications/Claude Code Usage.app`,
+launches it, and registers it to start at login. Re-run `./install.sh` any time
+to rebuild and update.
+
+## How it works
+
+1. Recursively scans `~/.claude/projects/**/*.jsonl`.
+2. For each assistant message it reads `message.usage` (input, output, cache
+   read, and 5-minute / 1-hour cache-write tokens) and `message.model`.
+3. Deduplicates records by `message.id | requestId`.
+4. Buckets cost by **local** calendar day, then aggregates today / month / 14-day
+   views.
+5. Refreshes every 60 seconds on a background thread; only files whose
+   modification time or size changed are re-parsed.
+
+### Cost basis
+
+Costs are **token-based dollar estimates** — what your usage would cost at
+Anthropic's published per-token API rates. This is the same basis tools like
+`ccusage` use. If you are on a Max/Pro subscription, treat the numbers as a usage
+gauge, not a literal invoice.
+
+## Updating prices
+
+Rates are hardcoded in the `Pricing` enum in
+[`Sources/ClaudeCodeUsageKit/Pricing/Pricing.swift`](Sources/ClaudeCodeUsageKit/Pricing/Pricing.swift)
+(per million tokens; cache write = 1.25× / 2× input, cache read = 0.1× input).
+When Anthropic changes pricing, edit that enum and re-run `./install.sh`.
+
+| Model      | Input | Output |
+|------------|-------|--------|
+| Opus 4.8   | $5    | $25    |
+| Sonnet 4.6 | $3    | $15    |
+| Haiku 4.5  | $1    | $5     |
+| Fable 5    | $10   | $50    |
+
+## Uninstall
+
+```sh
+./uninstall.sh
+```
+
+(First turn off **Launch at login** in the menu so macOS drops the login-item
+registration cleanly.)
+
+## Layout
+
+A SwiftPM package: a thin executable hands off to a library target
+(`ClaudeCodeUsageKit`) so the app logic is unit-testable, one file per
+type/responsibility.
+
+```
+Package.swift
+Sources/
+  ClaudeCodeUsage/main.swift          # thin executable: NSApplication + makeAppDelegate()
+  ClaudeCodeUsageKit/
+    App/            # AppDelegate (status item + popover, AppKit) + AppCoordinator (scan loop, AppKit-free)
+    Models/         # UsageEntry, Snapshot, TierTheme — plain data
+    Pricing/        # per-token USD rates by model family
+    Preferences/     # Config — UserDefaults-backed settings
+    Services/       # UsageScanner — reads/parses ~/.claude/projects/**/*.jsonl
+    ViewModels/      # Tiers, Formatting — pure, unit-tested derivation
+    Views/           # SwiftUI popover + Settings window
+Tests/
+  ClaudeCodeUsageKitTests/            # XCTest: pricing, tiers, formatting, scanner parsing/aggregation
+Resources/Info.plist   # bundle metadata (LSUIElement = menu-bar only)
+build.sh               # swift build -c release, then wrap the binary in the .app bundle
+check.sh               # compile gate + swift test (skips tests without Xcode; CI still runs them)
+install.sh             # build + install to ~/Applications + launch
+uninstall.sh           # quit + remove
+.github/workflows/ci.yml  # swift build --build-tests && swift test on push/PR
+```
+
+Run `./check.sh` before rebuilding to catch compile errors and test failures early.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
