@@ -1,3 +1,4 @@
+import AppKit
 import ServiceManagement
 import SwiftUI
 
@@ -17,6 +18,13 @@ struct SettingsView: View {
     @State private var billingCycleResetDay = Config.billingCycleResetDay
     @State private var themes = Config.tierThemes
     @State private var activeThemeId = Config.activeTierThemeId
+    @State private var workingDays = Config.workingDays
+    @FocusState private var focusedIconStepId: UUID?
+
+    /// Weekday chips in Monday-first order (Calendar weekday numbers: 1 = Sunday).
+    private let orderedWeekdays: [(number: Int, label: String)] = [
+        (2, "Mon"), (3, "Tue"), (4, "Wed"), (5, "Thu"), (6, "Fri"), (7, "Sat"), (1, "Sun"),
+    ]
 
     var body: some View {
         TabView {
@@ -26,25 +34,31 @@ struct SettingsView: View {
                 .tabItem { Label("Tier Theme", systemImage: "chart.bar.fill") }
         }
         .padding(20)
-        .frame(width: 440, height: 340)
+        .frame(width: 440, height: 400)
     }
 
     // MARK: General
 
     private var generalTab: some View {
-        Form {
+        VStack(alignment: .leading, spacing: 16) {
             Toggle("Launch at login", isOn: Binding(
                 get: { launchAtLogin },
                 set: { launchAtLogin = $0; setLaunchAtLogin($0) }
             ))
 
-            Picker("Plan", selection: Binding(
-                get: { planTier },
-                set: { planTier = $0; Config.planTier = $0; onChange() }
-            )) {
-                ForEach(PlanTier.allCases, id: \.self) { plan in
-                    Text(plan.displayName).tag(plan)
+            HStack {
+                Text("Plan")
+                Spacer()
+                Picker("", selection: Binding(
+                    get: { planTier },
+                    set: { planTier = $0; Config.planTier = $0; onChange() }
+                )) {
+                    ForEach(PlanTier.allCases, id: \.self) { plan in
+                        Text(plan.displayName).tag(plan)
+                    }
                 }
+                .labelsHidden()
+                .frame(width: 160)
             }
 
             HStack {
@@ -63,7 +77,31 @@ struct SettingsView: View {
             ), in: 1...28) {
                 Text("Cycle resets on day \(billingCycleResetDay)")
             }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Working days")
+                Text("Used to project your month total; days you don't work aren't extrapolated.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    ForEach(orderedWeekdays, id: \.number) { day in
+                        Toggle(day.label, isOn: Binding(
+                            get: { workingDays.contains(day.number) },
+                            set: { isOn in
+                                if isOn { workingDays.insert(day.number) } else { workingDays.remove(day.number) }
+                                Config.workingDays = workingDays
+                                onChange()
+                            }
+                        ))
+                        .toggleStyle(.button)
+                        .frame(maxWidth: .infinity)
+                        .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onDisappear(perform: commitMonthlyBudget)
     }
 
@@ -85,6 +123,19 @@ struct SettingsView: View {
         }
     }
 
+    /// Focus a step's emoji field and open the system emoji & symbols palette,
+    /// so the picked character lands in that field. Clears the field first so
+    /// the selection replaces the current emoji rather than appending to it.
+    private func openEmojiPicker(for stepId: UUID, in themeIndex: Int) {
+        if let index = themes[themeIndex].steps.firstIndex(where: { $0.id == stepId }) {
+            themes[themeIndex].steps[index].icon = ""
+        }
+        focusedIconStepId = stepId
+        DispatchQueue.main.async {
+            NSApp.orderFrontCharacterPalette(nil)
+        }
+    }
+
     // MARK: Tier Theme
 
     private var tierThemeTab: some View {
@@ -102,7 +153,16 @@ struct SettingsView: View {
                 List {
                     ForEach($themes[themeIndex].steps) { $step in
                         HStack {
-                            TextField("🙂", text: $step.icon).frame(width: 36)
+                            TextField("🙂", text: $step.icon)
+                                .frame(width: 32)
+                                .focused($focusedIconStepId, equals: step.id)
+                            Button {
+                                openEmojiPicker(for: step.id, in: themeIndex)
+                            } label: {
+                                Image(systemName: "face.smiling")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Pick an emoji")
                             TextField("Name", text: $step.name).frame(width: 130)
                             Text("$")
                             TextField("0", value: $step.unlockAtDollars, format: .number)

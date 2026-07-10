@@ -47,6 +47,18 @@ enum Config {
         set { UserDefaults.standard.set(min(max(newValue, 1), 28), forKey: "billingCycleResetDay") }
     }
 
+    /// Weekdays the month projection extrapolates over (Calendar weekday numbers:
+    /// 1 = Sunday ... 7 = Saturday). Defaults to Monday–Friday, so days you don't
+    /// work don't inflate the projected total. An empty selection falls back to
+    /// the default.
+    static var workingDays: Set<Int> {
+        get {
+            let stored = (UserDefaults.standard.array(forKey: "workingDays") as? [Int]) ?? []
+            return stored.isEmpty ? [2, 3, 4, 5, 6] : Set(stored)
+        }
+        set { UserDefaults.standard.set(Array(newValue).sorted(), forKey: "workingDays") }
+    }
+
     /// `TierTheme.id` of the ladder currently shown in the menu bar and popover.
     static var activeTierThemeId: String {
         get { UserDefaults.standard.string(forKey: "activeTierThemeId") ?? defaultTierThemes[0].id }

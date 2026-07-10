@@ -5,8 +5,11 @@ import SwiftUI
 
 final class UsageModel: ObservableObject {
     @Published var snapshot = Snapshot()
-    var onRefresh: () -> Void = {}
+    /// Set to the newer release's version string when an update is available;
+    /// nil hides the update banner.
+    @Published var availableUpdateVersion: String?
     var onOpenSettings: () -> Void = {}
+    var onOpenReleasePage: () -> Void = {}
 }
 
 // MARK: - Popover content
@@ -16,32 +19,30 @@ struct UsageView: View {
 
     var body: some View {
         let snapshot = model.snapshot
-        let theme = Config.activeTierTheme
-        let tier = Tiers.current(forSpend: snapshot.todayCost, in: theme)
-        let next = Tiers.next(forSpend: snapshot.todayCost, in: theme)
         let last7 = snapshot.last14Days.suffix(7).map(\.cost).reduce(0, +)
         let peakHour = snapshot.hourlyToday.indices.max(by: { snapshot.hourlyToday[$0] < snapshot.hourlyToday[$1] })
         let topModelCost = snapshot.costByModelThisMonth.map(\.cost).max() ?? 0
 
         VStack(alignment: .leading, spacing: 14) {
+            // UPDATE AVAILABLE
+            if let version = model.availableUpdateVersion {
+                Button(action: { model.onOpenReleasePage() }) {
+                    HStack(spacing: 6) {
+                        Text("🔔 Update available: \(version)")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                Hairline()
+            }
+
             // TODAY
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    SectionHeader(title: "TODAY")
-                    Spacer()
-                    Text(tier.icon.isEmpty ? tier.name : "\(tier.name) \(tier.icon)")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Spend").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Text(formatMoney(snapshot.todayCost))
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundStyle(Theme.accent)
-                }
-                TierProgress(fraction: tierFraction(tier: tier, next: next, spend: snapshot.todayCost),
-                             caption: tierCaption(next: next, spend: snapshot.todayCost),
-                             atTop: next == nil)
+                SectionHeader(title: "TODAY")
+                StatRow(label: "Spend", value: formatMoney(snapshot.todayCost), emphasis: true, accent: true)
                 StatRow(label: "Tokens",
                         value: "\(formatTokens(snapshot.inputTokensToday)) in · \(formatTokens(snapshot.outputTokensToday)) out")
                 if snapshot.averagePerActiveDay > 0 {
@@ -58,9 +59,6 @@ struct UsageView: View {
                 SectionHeader(title: "THIS MONTH")
                 StatRow(label: "Month-to-date", value: formatMoney(snapshot.monthCost), emphasis: true)
                 StatRow(label: "Projected total", value: formatMoney(snapshot.projectedMonthCost), emphasis: true)
-                StatRow(label: "Busiest day",
-                        value: "\(snapshot.busiestDayLabel) · \(formatMoney(snapshot.busiestDayCost))",
-                        accent: true)
                 let budgetFraction = snapshot.monthCost / max(snapshot.monthlyBudgetDollars, 0.01)
                 VStack(alignment: .leading, spacing: 5) {
                     StatRow(label: "Budget", value: "\(formatMoney(snapshot.monthCost)) of \(formatMoney(snapshot.monthlyBudgetDollars))")
@@ -92,7 +90,9 @@ struct UsageView: View {
                             .font(.caption).foregroundStyle(Theme.accent)
                     }
                 }
-                BarChart(values: snapshot.hourlyToday)
+                BarChart(values: snapshot.hourlyToday, tooltip: { hour in
+                    String(format: "%02d:00 · %@", hour, formatMoney(snapshot.hourlyToday[hour]))
+                })
             }
 
             Hairline()
@@ -105,15 +105,16 @@ struct UsageView: View {
                     Text("7d · \(formatMoney(last7))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                BarChart(values: snapshot.last14Days.map(\.cost))
+                BarChart(values: snapshot.last14Days.map(\.cost), tooltip: { index in
+                    let day = snapshot.last14Days[index]
+                    return "\(formatDayLabel(day.dayStart)) · \(formatMoney(day.cost))"
+                })
             }
 
             Hairline()
 
             // FOOTER
             HStack(spacing: 12) {
-                Button("Refresh") { model.onRefresh() }
-                    .buttonStyle(.borderless)
                 Button("Settings…") { model.onOpenSettings() }
                     .buttonStyle(.borderless)
                 Spacer()
@@ -125,17 +126,5 @@ struct UsageView: View {
         }
         .padding(16)
         .frame(width: 300)
-    }
-
-    private func tierFraction(tier: TierStep, next: TierStep?, spend: Double) -> Double {
-        guard let next else { return 1 }
-        let span = next.unlockAtDollars - tier.unlockAtDollars
-        guard span > 0 else { return 0 }
-        return min(max((spend - tier.unlockAtDollars) / span, 0), 1)
-    }
-
-    private func tierCaption(next: TierStep?, spend: Double) -> String {
-        guard let next else { return "Top tier reached 🎉" }
-        return "Next: \(next.name) \(next.icon) in \(formatMoney(next.unlockAtDollars - spend))"
     }
 }

@@ -100,4 +100,34 @@ final class UsageScannerTests: XCTestCase {
         let snapshot = UsageScanner.aggregate(entries: [], now: Date(), billingCycleResetDay: 1, monthlyBudgetDollars: 250)
         XCTAssertEqual(snapshot.monthlyBudgetDollars, 250)
     }
+
+    func test_pace_average_counts_only_days_with_spend() {
+        let calendar = Calendar(identifier: .gregorian)
+        let day1 = calendar.date(from: DateComponents(year: 2026, month: 7, day: 2))!
+        let day2 = calendar.date(from: DateComponents(year: 2026, month: 7, day: 3))!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 7, day: 9))!
+        let entries = [
+            UsageEntry.stub(dedupeKey: "d1", timestamp: day1, model: "claude-sonnet-4-6", inputTokens: 1_000_000), // $3
+            UsageEntry.stub(dedupeKey: "d2", timestamp: day2, model: "claude-sonnet-4-6", inputTokens: 3_000_000), // $9
+        ]
+        let snapshot = UsageScanner.aggregate(entries: entries, now: now, billingCycleResetDay: 1,
+                                               monthlyBudgetDollars: 1000, calendar: calendar)
+        // Two active days ($3, $9); days with no spend are not in the divisor → avg = $6.
+        XCTAssertEqual(snapshot.averagePerActiveDay, 6.0, accuracy: 0.0001)
+    }
+
+    func test_projection_extrapolates_over_working_days_only() {
+        let calendar = Calendar(identifier: .gregorian)
+        let workingDay = calendar.date(from: DateComponents(year: 2026, month: 7, day: 2))!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 7, day: 9))!
+        // July 2026 (Wed 1st): 7 Mon–Fri days elapsed through the 9th, 23 in the month.
+        let entries = [
+            UsageEntry.stub(dedupeKey: "m", timestamp: workingDay, model: "claude-sonnet-4-6", inputTokens: 7_000_000), // $21
+        ]
+        let snapshot = UsageScanner.aggregate(entries: entries, now: now, billingCycleResetDay: 1,
+                                               monthlyBudgetDollars: 1000, workingDays: [2, 3, 4, 5, 6],
+                                               calendar: calendar)
+        XCTAssertEqual(snapshot.monthCost, 21.0, accuracy: 0.0001)
+        XCTAssertEqual(snapshot.projectedMonthCost, 69.0, accuracy: 0.0001) // 21 / 7 * 23
+    }
 }

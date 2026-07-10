@@ -7,8 +7,6 @@ struct Snapshot {
     var monthCost: Double = 0
     var projectedMonthCost: Double = 0
     var averagePerActiveDay: Double = 0
-    var busiestDayLabel: String = "—"
-    var busiestDayCost: Double = 0
     var costByModelThisMonth: [(name: String, cost: Double)] = []
     var topProjectsToday: [(name: String, cost: Double)] = []
     var last14Days: [DailyTotal] = []

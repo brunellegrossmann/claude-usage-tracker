@@ -17,19 +17,21 @@ extension — because every session writes its token usage to
 
 - **Menu bar:** tier emoji + today's spend (e.g. `🥇 $4.79`).
 - **Month-to-date** in the dropdown.
-- **Projected month total** — extrapolated from your daily burn rate.
-- **Pace indicator** — today vs. your average active day (↑ above / ↓ below).
+- **Projected month total** — extrapolates your spend over the cycle's working
+  days (set them in Settings; Mon–Fri by default).
+- **Pace indicator** — today vs. your average spend across the days you were
+  active (↑ above / ↓ below); days with no spend don't count.
 - **Monthly budget bar** — spend vs. a configurable cap, on a configurable
   billing-cycle reset day (Settings ▸ General).
 - **By-model breakdown** for the month (Opus / Sonnet / Haiku / Fable).
-- **Top projects today** — derived from each session's working directory.
-- **14-day sparkline** (`▁▂▃▄▅▆▇█`) plus a last-7-days total.
+- **Today-by-hour and 14-day charts** — hover any bar for its hour/day and
+  amount; the 14-day chart also shows a last-7-days total.
 - **Tokens in / out today.**
 - **Tier ladder** in the menu bar (e.g. medals up to 💎, then 💩 past budget) —
-  pick a ladder and edit each step's name/emoji/threshold in Settings ▸ Tier
-  Theme.
+  pick a ladder and edit each step's name/threshold in Settings ▸ Tier Theme;
+  the 🙂 button next to each step opens the native emoji picker.
 - **Settings window** (Settings… in the popover footer): plan, launch at
-  login, monthly budget, billing-cycle reset day, tier ladder.
+  login, monthly budget, billing-cycle reset day, working days, tier ladder.
 - **Launches at login** automatically (native login item; toggle in Settings).
 - No dock icon (menu-bar only). No Python, no background daemon — one Swift binary.
 
@@ -51,6 +53,33 @@ cd claude-code-usage
 This compiles the app, installs it to `~/Applications/Claude Code Usage.app`,
 launches it, and registers it to start at login. Re-run `./install.sh` any time
 to rebuild and update.
+
+## Updates
+
+The app checks GitHub for a newer release in the background (at most once every
+6 hours) and, when one exists, shows a **🔔 Update available** banner at the top
+of the popover.
+Clicking it opens the latest release page.
+To update, pull and rebuild:
+
+```sh
+git pull && ./install.sh
+```
+
+### Cutting a release (maintainer)
+
+Releases are the version the app compares against, published by the
+`release` GitHub Actions workflow when a `v*` tag is pushed:
+
+```sh
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The workflow builds the app (proving the tag compiles), stamps the version, and
+publishes a GitHub Release with auto-generated notes.
+No binary is attached - the app is ad-hoc signed, so distribution stays
+build-from-source.
 
 ## How it works
 
