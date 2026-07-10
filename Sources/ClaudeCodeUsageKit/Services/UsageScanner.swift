@@ -214,7 +214,6 @@ final class UsageScanner: UsageScanning {
 
     private static func friendlyModel(_ model: String) -> String {
         let m = model.lowercased()
-        if m.contains("opus-4-8") { return "Opus 4.8" }
         if m.contains("opus") { return "Opus" }
         if m.contains("sonnet") { return "Sonnet" }
         if m.contains("haiku") { return "Haiku" }
