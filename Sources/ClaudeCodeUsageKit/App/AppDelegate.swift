@@ -22,9 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePopover)
 
-        model.onRefresh = { [weak self] in self?.coordinator.refresh() }
         model.onOpenSettings = { [weak self] in self?.settingsWindow.show() }
+        model.onOpenReleasePage = { NSWorkspace.shared.open(AppRelease.releasesPageURL) }
         coordinator.onSnapshot = { [weak self] snapshot in self?.render(snapshot) }
+        coordinator.onUpdateAvailable = { [weak self] version in self?.model.availableUpdateVersion = version }
 
         popover.behavior = .transient
         let host = NSHostingController(rootView: UsageView(model: model))

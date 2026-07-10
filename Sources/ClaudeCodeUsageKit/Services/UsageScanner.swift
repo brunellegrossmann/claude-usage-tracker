@@ -25,7 +25,8 @@ final class UsageScanner: UsageScanning {
         let entries = fileCache.values.flatMap(\.entries)
         return Self.aggregate(entries: entries, now: Date(),
                                billingCycleResetDay: Config.billingCycleResetDay,
-                               monthlyBudgetDollars: Config.monthlyBudgetDollars)
+                               monthlyBudgetDollars: Config.monthlyBudgetDollars,
+                               workingDays: Config.workingDays)
     }
 
     private func refreshCache() {
@@ -128,11 +129,13 @@ final class UsageScanner: UsageScanning {
     // MARK: Pure aggregation (unit-tested directly)
 
     /// Buckets `entries` into the numbers the popover renders: today's spend,
-    /// month-to-date (from `billingCycleResetDay`), projection, busiest day,
-    /// per-model and per-project breakdowns, hourly-today, and the 14-day
-    /// sparkline. Dedupes by `UsageEntry.dedupeKey` across all entries.
+    /// month-to-date (from `billingCycleResetDay`), projection, per-model and
+    /// per-project breakdowns, hourly-today, and the 14-day sparkline. The pace
+    /// average covers days with spend; the projection extrapolates over the
+    /// cycle's `workingDays`. Dedupes by `UsageEntry.dedupeKey`.
     static func aggregate(entries: [UsageEntry], now: Date, billingCycleResetDay: Int,
-                           monthlyBudgetDollars: Double, calendar: Calendar = .current) -> Snapshot {
+                           monthlyBudgetDollars: Double, workingDays: Set<Int> = Set(1...7),
+                           calendar: Calendar = .current) -> Snapshot {
         let todayStart = calendar.startOfDay(for: now)
         let monthStart = cycleStart(for: now, resetDay: billingCycleResetDay, calendar: calendar)
 
@@ -175,22 +178,20 @@ final class UsageScanner: UsageScanning {
         snapshot.lastRefresh = now
         snapshot.monthlyBudgetDollars = monthlyBudgetDollars
 
-        // Month projection from average spend per elapsed day of the cycle.
+        // Month projection: extrapolate spend so far over the cycle's working days,
+        // so days you don't work don't inflate the projected total.
         let nextCycleStart = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
-        let daysElapsed = (calendar.dateComponents([.day], from: monthStart, to: todayStart).day ?? 0) + 1
-        let daysInCycle = calendar.dateComponents([.day], from: monthStart, to: nextCycleStart).day ?? 30
-        if daysElapsed > 0 {
-            snapshot.projectedMonthCost = snapshot.monthCost / Double(daysElapsed) * Double(daysInCycle)
+        let lastCycleDay = calendar.date(byAdding: .day, value: -1, to: nextCycleStart) ?? todayStart
+        let workingDaysElapsed = countWorkingDays(from: monthStart, through: todayStart, in: workingDays, calendar: calendar)
+        let workingDaysInCycle = countWorkingDays(from: monthStart, through: lastCycleDay, in: workingDays, calendar: calendar)
+        if workingDaysElapsed > 0 {
+            snapshot.projectedMonthCost = snapshot.monthCost / Double(workingDaysElapsed) * Double(workingDaysInCycle)
         }
 
-        // Average over active days this month + busiest day this month.
-        let monthDays = costByDay.filter { $0.key >= monthStart && $0.value > 0 }
-        if !monthDays.isEmpty {
-            snapshot.averagePerActiveDay = monthDays.values.reduce(0, +) / Double(monthDays.count)
-            if let busiest = monthDays.max(by: { $0.value < $1.value }) {
-                snapshot.busiestDayLabel = shortDayFormatter.string(from: busiest.key)
-                snapshot.busiestDayCost = busiest.value
-            }
+        // Pace baseline: average over the days that actually had spend.
+        let activeDays = costByDay.filter { $0.key >= monthStart && $0.value > 0 }
+        if !activeDays.isEmpty {
+            snapshot.averagePerActiveDay = activeDays.values.reduce(0, +) / Double(activeDays.count)
         }
 
         snapshot.costByModelThisMonth = costByModelMonth
@@ -213,7 +214,6 @@ final class UsageScanner: UsageScanning {
 
     private static func friendlyModel(_ model: String) -> String {
         let m = model.lowercased()
-        if m.contains("opus-4-8") { return "Opus 4.8" }
         if m.contains("opus") { return "Opus" }
         if m.contains("sonnet") { return "Sonnet" }
         if m.contains("haiku") { return "Haiku" }
@@ -221,11 +221,20 @@ final class UsageScanner: UsageScanning {
         return model
     }
 
-    private static let shortDayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return f
-    }()
+    /// Count of days in `start...end` (inclusive) whose weekday is in `workingDays`
+    /// (Calendar weekday numbers: 1 = Sunday ... 7 = Saturday).
+    static func countWorkingDays(from start: Date, through end: Date,
+                                 in workingDays: Set<Int>, calendar: Calendar) -> Int {
+        guard start <= end else { return 0 }
+        var count = 0
+        var day = start
+        while day <= end {
+            if workingDays.contains(calendar.component(.weekday, from: day)) { count += 1 }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return count
+    }
 
     /// Start of the current billing cycle: `resetDay` of this month if `date`
     /// is on or after it, otherwise `resetDay` of the previous month.

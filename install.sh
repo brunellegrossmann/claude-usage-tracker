@@ -19,5 +19,5 @@ bash "$REPO_DIR/build.sh" "$APP"
 
 open "$APP"
 echo
-echo "Installed and launched. Look for '\$today ▸ \$month' in your menu bar."
+echo "Installed and launched. Look for the tier emoji + today's spend (e.g. '🥇 \$4.79') in your menu bar."
 echo "It will launch automatically at every login (toggle in Settings)."

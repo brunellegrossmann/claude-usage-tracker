@@ -63,26 +63,13 @@ struct ProgressBar: View {
     }
 }
 
-/// Progress toward the next tier, with a caption naming it and its cost away.
-struct TierProgress: View {
-    let fraction: Double
-    let caption: String
-    let atTop: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ProgressBar(fraction: atTop ? 1 : fraction, tint: Theme.accent)
-            Text(caption)
-                .font(.caption)
-                .foregroundStyle(atTop ? Theme.accent : .secondary)
-        }
-    }
-}
-
-/// Vertical bar chart with rounded caps, gradient fill, and the peak bar in accent.
+/// Vertical bar chart with rounded caps, the peak bar in accent, and a hover
+/// tooltip per column. Each column is a full-height hover target so even
+/// near-zero bars are easy to point at; `tooltip` supplies the text per index.
 struct BarChart: View {
     let values: [Double]
     var height: CGFloat = 40
+    var tooltip: (Int) -> String = { _ in "" }
 
     var body: some View {
         let maxValue = values.max() ?? 0
@@ -90,10 +77,15 @@ struct BarChart: View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(values.indices, id: \.self) { index in
                 let ratio = maxValue > 0 ? values[index] / maxValue : 0
-                Capsule()
-                    .fill(index == peak && maxValue > 0 ? Theme.accentBar : Theme.neutralBar)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: max(2, CGFloat(ratio) * height))
+                ZStack(alignment: .bottom) {
+                    Color.clear
+                    Capsule()
+                        .fill(index == peak && maxValue > 0 ? Theme.accentBar : Theme.neutralBar)
+                        .frame(height: max(2, CGFloat(ratio) * height))
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .help(tooltip(index))
             }
         }
         .frame(height: height, alignment: .bottom)
