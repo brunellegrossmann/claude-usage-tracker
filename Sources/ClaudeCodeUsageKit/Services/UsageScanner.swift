@@ -14,9 +14,28 @@ final class UsageScanner: UsageScanning {
     private var fileCache: [String: (modified: Date, size: Int, entries: [UsageEntry])] = [:]
 
     init() {
-        projectsDirectory = FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/projects")
+        projectsDirectory = Self.resolveProjectsDirectory(
+            home: FileManager.default.homeDirectoryForCurrentUser,
+            environment: ProcessInfo.processInfo.environment)
+    }
+
+    /// Resolves the `projects` log directory Claude Code writes to. Honors
+    /// `CLAUDE_CONFIG_DIR` — the same override Claude Code uses to relocate
+    /// `~/.claude` — so a user whose config lives elsewhere still sees history.
+    /// Falls back to `~/.claude` when the variable is unset or blank.
+    static func resolveProjectsDirectory(home: URL, environment: [String: String]) -> URL {
+        let override = environment["CLAUDE_CONFIG_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let configDirectory = override.isEmpty
+            ? home.appendingPathComponent(".claude")
+            : expandLeadingTilde(override, home: home)
+        return configDirectory.appendingPathComponent("projects")
+    }
+
+    private static func expandLeadingTilde(_ path: String, home: URL) -> URL {
+        if path == "~" { return home }
+        if path.hasPrefix("~/") { return home.appendingPathComponent(String(path.dropFirst(2))) }
+        return URL(fileURLWithPath: path)
     }
 
     /// Re-scan changed files and produce a fresh aggregated snapshot.

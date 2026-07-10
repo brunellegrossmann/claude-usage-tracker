@@ -45,6 +45,33 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertNil(UsageScanner.parseLine("not json", fallbackProjectName: "fallback"))
     }
 
+    // MARK: resolveProjectsDirectory
+
+    private let home = URL(fileURLWithPath: "/Users/test")
+
+    func test_resolve_projects_directory_defaults_to_dot_claude_when_env_unset() {
+        let directory = UsageScanner.resolveProjectsDirectory(home: home, environment: [:])
+        XCTAssertEqual(directory.path, "/Users/test/.claude/projects")
+    }
+
+    func test_resolve_projects_directory_honors_claude_config_dir_override() {
+        let directory = UsageScanner.resolveProjectsDirectory(
+            home: home, environment: ["CLAUDE_CONFIG_DIR": "/opt/claude-config"])
+        XCTAssertEqual(directory.path, "/opt/claude-config/projects")
+    }
+
+    func test_resolve_projects_directory_expands_leading_tilde_in_override() {
+        let directory = UsageScanner.resolveProjectsDirectory(
+            home: home, environment: ["CLAUDE_CONFIG_DIR": "~/work/.claude"])
+        XCTAssertEqual(directory.path, "/Users/test/work/.claude/projects")
+    }
+
+    func test_resolve_projects_directory_ignores_blank_override() {
+        let directory = UsageScanner.resolveProjectsDirectory(
+            home: home, environment: ["CLAUDE_CONFIG_DIR": "   "])
+        XCTAssertEqual(directory.path, "/Users/test/.claude/projects")
+    }
+
     // MARK: cycleStart
 
     func test_cycle_start_on_reset_day_one_matches_calendar_month() {
