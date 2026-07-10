@@ -84,7 +84,7 @@ final class UsageScanner: UsageScanning {
         else { return nil }
 
         let model = (message["model"] as? String) ?? "unknown"
-        guard Pricing.rates(forModel: model) != nil else { return nil }
+        guard Pricing.isBillable(model) else { return nil }
 
         guard let date = parseDate(object["timestamp"]) else { return nil }
 

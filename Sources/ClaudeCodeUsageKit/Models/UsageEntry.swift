@@ -14,7 +14,7 @@ struct UsageEntry {
     let cacheWrite1hTokens: Int
 
     var cost: Double {
-        guard let r = Pricing.rates(forModel: model) else { return 0 }
+        guard let r = Pricing.rates(forModel: model, usedOn: timestamp) else { return 0 }
         return Double(inputTokens) * r.inputPerToken
             + Double(outputTokens) * r.outputPerToken
             + Double(cacheReadTokens) * r.cacheReadPerToken

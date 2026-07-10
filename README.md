@@ -75,12 +75,17 @@ Rates are hardcoded in the `Pricing` enum in
 (per million tokens; cache write = 1.25× / 2× input, cache read = 0.1× input).
 When Anthropic changes pricing, edit that enum and re-run `./install.sh`.
 
-| Model      | Input | Output |
-|------------|-------|--------|
-| Opus 4.8   | $5    | $25    |
-| Sonnet 4.6 | $3    | $15    |
-| Haiku 4.5  | $1    | $5     |
-| Fable 5    | $10   | $50    |
+| Model                | Input | Output |
+|----------------------|-------|--------|
+| Opus 4.8             | $5    | $25    |
+| Sonnet 5 (intro)     | $2    | $10    |
+| Sonnet 4.6           | $3    | $15    |
+| Haiku 4.5            | $1    | $5     |
+| Fable 5              | $10   | $50    |
+
+Sonnet 5 is on introductory pricing ($2/$10) for usage before 2026-09-01; entries
+on or after that date are priced at the standard Sonnet rate ($3/$15) automatically,
+by the entry's own timestamp.
 
 ## Uninstall
 
