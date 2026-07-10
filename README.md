@@ -83,7 +83,9 @@ build-from-source.
 
 ## How it works
 
-1. Recursively scans `~/.claude/projects/**/*.jsonl`.
+1. Recursively scans `~/.claude/projects/**/*.jsonl` (or
+   `$CLAUDE_CONFIG_DIR/projects` when that variable relocates your Claude Code
+   config).
 2. For each assistant message it reads `message.usage` (input, output, cache
    read, and 5-minute / 1-hour cache-write tokens) and `message.model`.
 3. Deduplicates records by `message.id | requestId`.
