@@ -1,11 +1,12 @@
 # Claude Code Usage
 
-A native macOS **menu-bar app** that shows what your Claude Code usage costs —
-**today's spend** and **month-to-date** (resetting on a configurable day,
-the 1st by default) — at a glance, with a detailed breakdown in the dropdown.
+A native macOS **menu-bar app** that shows what your Claude Code usage costs.
+The menu bar shows **today's spend** behind a tier emoji at a glance.
+The dropdown adds **month-to-date** (resetting on a configurable day, the 1st by
+default), a projected month total, and a detailed breakdown.
 
 ```
-$4.79 ▸ $129.77
+🥇 $4.79
 ```
 
 It works no matter where you run Claude Code — direct terminal, Cursor, IDE
@@ -14,7 +15,8 @@ extension — because every session writes its token usage to
 
 ## Features
 
-- **Menu bar:** today's spend ▸ month-to-date.
+- **Menu bar:** tier emoji + today's spend (e.g. `🥇 $4.79`).
+- **Month-to-date** in the dropdown.
 - **Projected month total** — extrapolated from your daily burn rate.
 - **Pace indicator** — today vs. your average active day (↑ above / ↓ below).
 - **Monthly budget bar** — spend vs. a configurable cap, on a configurable
