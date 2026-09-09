@@ -25,7 +25,8 @@ final class AppCoordinator {
     /// release than the running app is available.
     var onUpdateAvailable: ((String) -> Void)?
 
-    init(scanner: UsageScanning = UsageScanner(), updateChecker: UpdateChecking = GitHubReleaseChecker()) {
+    init(scanner: UsageScanning = UsageScanner(currentPricingCatalog: { BundledPricingFeed.catalog }),
+         updateChecker: UpdateChecking = GitHubReleaseChecker()) {
         self.scanner = scanner
         self.updateChecker = updateChecker
     }

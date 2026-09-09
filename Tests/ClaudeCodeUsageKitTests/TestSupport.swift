@@ -21,3 +21,14 @@ extension UsageEntry {
             cacheWrite5mTokens: cacheWrite5mTokens, cacheWrite1hTokens: cacheWrite1hTokens)
     }
 }
+
+extension PricingCatalog {
+    /// The prices shipped with the app. Tests assert against these so a price
+    /// change shows up as a failing expectation rather than a silent drift.
+    static let bundledForTests = BundledPricingFeed.catalog
+
+    /// Builds a catalog from feed JSON, failing the test when it is rejected.
+    static func fromFeedJSON(_ json: String) throws -> PricingCatalog {
+        try PricingCatalogDecoder.decode(Data(json.utf8), origin: .bundled)
+    }
+}

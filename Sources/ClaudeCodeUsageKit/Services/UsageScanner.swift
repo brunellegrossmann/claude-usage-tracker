@@ -11,9 +11,13 @@ protocol UsageScanning {
 
 final class UsageScanner: UsageScanning {
     private let projectsDirectory: URL
+    /// Asked for the catalog on every scan, so a pricing-feed refresh reprices
+    /// already-parsed history without re-reading a single log file.
+    private let currentPricingCatalog: () -> PricingCatalog
     private var fileCache: [String: (modified: Date, size: Int, entries: [UsageEntry])] = [:]
 
-    init() {
+    init(currentPricingCatalog: @escaping () -> PricingCatalog) {
+        self.currentPricingCatalog = currentPricingCatalog
         projectsDirectory = Self.resolveProjectsDirectory(
             home: FileManager.default.homeDirectoryForCurrentUser,
             environment: ProcessInfo.processInfo.environment)
@@ -42,7 +46,7 @@ final class UsageScanner: UsageScanning {
     func scan() -> Snapshot {
         refreshCache()
         let entries = fileCache.values.flatMap(\.entries)
-        return Self.aggregate(entries: entries, now: Date(),
+        return Self.aggregate(entries: entries, catalog: currentPricingCatalog(), now: Date(),
                                billingCycleResetDay: Config.billingCycleResetDay,
                                monthlyBudgetDollars: Config.monthlyBudgetDollars,
                                workingDays: Config.workingDays)
@@ -95,7 +99,8 @@ final class UsageScanner: UsageScanning {
     }()
 
     /// Parses one `~/.claude/projects/**/*.jsonl` line into a `UsageEntry`, or
-    /// nil for lines with no usage, no billable model, or malformed JSON.
+    /// nil for lines with no usage block, no timestamp, or malformed JSON.
+    /// Whether the model is billable is decided later, by the pricing catalog.
     static func parseLine(_ line: String, fallbackProjectName: String) -> UsageEntry? {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -104,7 +109,6 @@ final class UsageScanner: UsageScanning {
         else { return nil }
 
         let model = (message["model"] as? String) ?? "unknown"
-        guard Pricing.isBillable(model) else { return nil }
 
         guard let date = parseDate(object["timestamp"]) else { return nil }
 
@@ -152,7 +156,10 @@ final class UsageScanner: UsageScanning {
     /// per-project breakdowns, hourly-today, and the 14-day sparkline. The pace
     /// average covers days with spend; the projection extrapolates over the
     /// cycle's `workingDays`. Dedupes by `UsageEntry.dedupeKey`.
-    static func aggregate(entries: [UsageEntry], now: Date, billingCycleResetDay: Int,
+    /// Entries the `catalog` does not price (synthetic records, models it has
+    /// never heard of) are skipped rather than counted as free.
+    static func aggregate(entries: [UsageEntry], catalog: PricingCatalog, now: Date,
+                           billingCycleResetDay: Int,
                            monthlyBudgetDollars: Double, workingDays: Set<Int> = Set(1...7),
                            calendar: Calendar = .current) -> Snapshot {
         let todayStart = calendar.startOfDay(for: now)
@@ -167,16 +174,17 @@ final class UsageScanner: UsageScanning {
         var outputTokensToday = 0
 
         for entry in entries {
+            guard catalog.isBillable(entry.model) else { continue }
             if !entry.dedupeKey.isEmpty {
                 if seen.contains(entry.dedupeKey) { continue }
                 seen.insert(entry.dedupeKey)
             }
-            let cost = entry.cost
+            let cost = entry.cost(using: catalog)
             let dayStart = calendar.startOfDay(for: entry.timestamp)
             costByDay[dayStart, default: 0] += cost
 
             if entry.timestamp >= monthStart {
-                costByModelMonth[friendlyModel(entry.model), default: 0] += cost
+                costByModelMonth[catalog.displayFamily(forModel: entry.model), default: 0] += cost
             }
             if entry.timestamp >= todayStart {
                 costByProjectToday[entry.projectName, default: 0] += cost
@@ -229,15 +237,6 @@ final class UsageScanner: UsageScanning {
         }
 
         return snapshot
-    }
-
-    private static func friendlyModel(_ model: String) -> String {
-        let m = model.lowercased()
-        if m.contains("opus") { return "Opus" }
-        if m.contains("sonnet") { return "Sonnet" }
-        if m.contains("haiku") { return "Haiku" }
-        if m.contains("fable") { return "Fable" }
-        return model
     }
 
     /// Count of days in `start...end` (inclusive) whose weekday is in `workingDays`

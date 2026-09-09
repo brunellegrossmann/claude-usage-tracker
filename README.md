@@ -101,24 +101,27 @@ Anthropic's published per-token API rates. This is the same basis tools like
 `ccusage` use. If you are on a Max/Pro subscription, treat the numbers as a usage
 gauge, not a literal invoice.
 
-## Updating prices
+## Prices
 
-Rates are hardcoded in the `Pricing` enum in
-[`Sources/ClaudeCodeUsageKit/Pricing/Pricing.swift`](Sources/ClaudeCodeUsageKit/Pricing/Pricing.swift)
-(per million tokens; cache write = 1.25× / 2× input, cache read = 0.1× input).
-When Anthropic changes pricing, edit that enum and re-run `./install.sh`.
+Rates live in one file, [`docs/pricing.json`](docs/pricing.json), taken from
+[Anthropic's published API rates](https://claude.com/pricing#api). It is the
+single source of truth: the app's copy is generated from it.
 
-| Model                | Input | Output |
-|----------------------|-------|--------|
-| Opus 4.8             | $5    | $25    |
-| Sonnet 5 (intro)     | $2    | $10    |
-| Sonnet 4.6           | $3    | $15    |
-| Haiku 4.5            | $1    | $5     |
-| Fable 5              | $10   | $50    |
+Each usage record is priced at the rate in effect **on its own timestamp**, so an
+announced change ("new rate from 26 Aug") leaves earlier days priced correctly
+instead of retroactively repricing your history.
 
-Sonnet 5 is on introductory pricing ($2/$10) for usage before 2026-09-01; entries
-on or after that date are priced at the standard Sonnet rate ($3/$15) automatically,
-by the entry's own timestamp.
+To change a price:
+
+```sh
+# 1. edit docs/pricing.json (bump "updatedAt", close the old period, open the new one)
+bash Scripts/embed_pricing.sh   # 2. regenerate the app's bundled copy
+./install.sh                    # 3. rebuild
+```
+
+CI validates the feed and fails if the generated copy is stale. Rates outside
+`0 < rate <= 1000` per million tokens, overlapping price periods, and a schema
+version the app doesn't understand are all refused rather than guessed at.
 
 ## Uninstall
 
@@ -142,7 +145,7 @@ Sources/
   ClaudeCodeUsageKit/
     App/            # AppDelegate (status item + popover, AppKit) + AppCoordinator (scan loop, AppKit-free)
     Models/         # UsageEntry, Snapshot, TierTheme — plain data
-    Pricing/        # per-token USD rates by model family
+    Pricing/        # price catalog: schema, validation, model matching, price periods
     Preferences/     # Config — UserDefaults-backed settings
     Services/       # UsageScanner — reads/parses ~/.claude/projects/**/*.jsonl
     ViewModels/      # Tiers, Formatting — pure, unit-tested derivation
@@ -150,6 +153,8 @@ Sources/
 Tests/
   ClaudeCodeUsageKitTests/            # XCTest: pricing, tiers, formatting, scanner parsing/aggregation
 Resources/Info.plist   # bundle metadata (LSUIElement = menu-bar only)
+docs/pricing.json      # the price list; source of truth for every rate
+Scripts/embed_pricing.sh  # regenerates the app's bundled copy of docs/pricing.json
 build.sh               # swift build -c release, then wrap the binary in the .app bundle
 check.sh               # compile gate + swift test (skips tests without Xcode; CI still runs them)
 install.sh             # build + install to ~/Applications + launch

@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-09",
+  "source": "https://claude.com/pricing#api",
+  "currency": "USD",
+  "unit": "USD per million tokens",
+  "fallbackModelId": "sonnet",
+  "defaultCacheMultipliers": {
+    "read": 0.1,
+    "write5m": 1.25,
+    "write1h": 2.0
+  },
+  "models": [
+    {
+      "id": "fable-5-1",
+      "displayName": "Fable 5.1",
+      "family": "Fable",
+      "match": ["fable-5-1", "fable5-1"],
+      "periods": [
+        {
+          "inputPerMillion": 10,
+          "outputPerMillion": 50,
+          "cacheReadPerMillion": 0.25,
+          "cacheWrite5mPerMillion": 12.5
+        }
+      ]
+    },
+    {
+      "id": "fable-5",
+      "displayName": "Fable 5",
+      "family": "Fable",
+      "legacy": true,
+      "match": ["fable-5", "fable", "mythos"],
+      "periods": [
+        {
+          "inputPerMillion": 10,
+          "outputPerMillion": 50,
+          "cacheReadPerMillion": 1.0,
+          "cacheWrite5mPerMillion": 12.5
+        }
+      ]
+    },
+    {
+      "id": "opus-4-1",
+      "displayName": "Opus 4.1",
+      "family": "Opus",
+      "legacy": true,
+      "match": ["opus-4-1"],
+      "periods": [
+        {
+          "inputPerMillion": 15,
+          "outputPerMillion": 75,
+          "cacheReadPerMillion": 1.5,
+          "cacheWrite5mPerMillion": 18.75
+        }
+      ]
+    },
+    {
+      "id": "opus",
+      "displayName": "Opus",
+      "family": "Opus",
+      "match": ["opus"],
+      "periods": [
+        {
+          "inputPerMillion": 5,
+          "outputPerMillion": 25,
+          "cacheReadPerMillion": 0.5,
+          "cacheWrite5mPerMillion": 6.25
+        }
+      ]
+    },
+    {
+      "id": "sonnet-5",
+      "displayName": "Sonnet 5",
+      "family": "Sonnet",
+      "match": ["sonnet-5", "sonnet5"],
+      "periods": [
+        {
+          "inputPerMillion": 2,
+          "outputPerMillion": 10,
+          "cacheReadPerMillion": 0.2,
+          "cacheWrite5mPerMillion": 2.5
+        }
+      ]
+    },
+    {
+      "id": "sonnet",
+      "displayName": "Sonnet",
+      "family": "Sonnet",
+      "match": ["sonnet"],
+      "periods": [
+        {
+          "inputPerMillion": 3,
+          "outputPerMillion": 15,
+          "cacheReadPerMillion": 0.3,
+          "cacheWrite5mPerMillion": 3.75
+        }
+      ]
+    },
+    {
+      "id": "haiku",
+      "displayName": "Haiku",
+      "family": "Haiku",
+      "match": ["haiku"],
+      "periods": [
+        {
+          "inputPerMillion": 1,
+          "outputPerMillion": 5,
+          "cacheReadPerMillion": 0.1,
+          "cacheWrite5mPerMillion": 1.25
+        }
+      ]
+    }
+  ]
+}
