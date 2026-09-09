@@ -34,11 +34,12 @@ final class UsageScannerTests: XCTestCase {
         XCTAssertEqual(entry?.cacheWrite1hTokens, 3)
     }
 
-    func test_parse_line_skips_non_billable_synthetic_entries() {
-        let line = """
-        {"timestamp":"2026-01-15T10:00:00.000Z","message":{"id":"msg-1","model":"<synthetic>","usage":{"input_tokens":1}}}
-        """
-        XCTAssertNil(UsageScanner.parseLine(line, fallbackProjectName: "fallback"))
+    func test_synthetic_entries_are_never_charged() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let entries = [UsageEntry.stub(dedupeKey: "s", timestamp: now, model: "<synthetic>", inputTokens: 1_000_000)]
+        let snapshot = UsageScanner.aggregate(entries: entries, catalog: .bundledForTests, now: now,
+                                               billingCycleResetDay: 1, monthlyBudgetDollars: 1000)
+        XCTAssertEqual(snapshot.todayCost, 0)
     }
 
     func test_parse_line_skips_malformed_json() {
@@ -109,7 +110,7 @@ final class UsageScannerTests: XCTestCase {
             UsageEntry.stub(dedupeKey: "a", timestamp: now, model: "claude-sonnet-4-6", inputTokens: 1_000_000),
             UsageEntry.stub(dedupeKey: "a", timestamp: now, model: "claude-sonnet-4-6", inputTokens: 1_000_000),
         ]
-        let snapshot = UsageScanner.aggregate(entries: entries, now: now, billingCycleResetDay: 1, monthlyBudgetDollars: 1000)
+        let snapshot = UsageScanner.aggregate(entries: entries, catalog: .bundledForTests, now: now, billingCycleResetDay: 1, monthlyBudgetDollars: 1000)
         XCTAssertEqual(snapshot.todayCost, 3.0, accuracy: 0.0001) // 1M sonnet input tokens @ $3/M, counted once
     }
 
@@ -118,13 +119,13 @@ final class UsageScannerTests: XCTestCase {
         let now = calendar.date(from: DateComponents(year: 2026, month: 3, day: 20))!
         let beforeCycle = calendar.date(from: DateComponents(year: 2026, month: 2, day: 1))!
         let entries = [UsageEntry.stub(dedupeKey: "old", timestamp: beforeCycle, model: "claude-sonnet-4-6", inputTokens: 1_000_000)]
-        let snapshot = UsageScanner.aggregate(entries: entries, now: now, billingCycleResetDay: 15,
+        let snapshot = UsageScanner.aggregate(entries: entries, catalog: .bundledForTests, now: now, billingCycleResetDay: 15,
                                                monthlyBudgetDollars: 1000, calendar: calendar)
         XCTAssertEqual(snapshot.monthCost, 0)
     }
 
     func test_aggregate_copies_monthly_budget_into_snapshot() {
-        let snapshot = UsageScanner.aggregate(entries: [], now: Date(), billingCycleResetDay: 1, monthlyBudgetDollars: 250)
+        let snapshot = UsageScanner.aggregate(entries: [], catalog: .bundledForTests, now: Date(), billingCycleResetDay: 1, monthlyBudgetDollars: 250)
         XCTAssertEqual(snapshot.monthlyBudgetDollars, 250)
     }
 
@@ -137,7 +138,7 @@ final class UsageScannerTests: XCTestCase {
             UsageEntry.stub(dedupeKey: "d1", timestamp: day1, model: "claude-sonnet-4-6", inputTokens: 1_000_000), // $3
             UsageEntry.stub(dedupeKey: "d2", timestamp: day2, model: "claude-sonnet-4-6", inputTokens: 3_000_000), // $9
         ]
-        let snapshot = UsageScanner.aggregate(entries: entries, now: now, billingCycleResetDay: 1,
+        let snapshot = UsageScanner.aggregate(entries: entries, catalog: .bundledForTests, now: now, billingCycleResetDay: 1,
                                                monthlyBudgetDollars: 1000, calendar: calendar)
         // Two active days ($3, $9); days with no spend are not in the divisor → avg = $6.
         XCTAssertEqual(snapshot.averagePerActiveDay, 6.0, accuracy: 0.0001)
@@ -151,7 +152,7 @@ final class UsageScannerTests: XCTestCase {
         let entries = [
             UsageEntry.stub(dedupeKey: "m", timestamp: workingDay, model: "claude-sonnet-4-6", inputTokens: 7_000_000), // $21
         ]
-        let snapshot = UsageScanner.aggregate(entries: entries, now: now, billingCycleResetDay: 1,
+        let snapshot = UsageScanner.aggregate(entries: entries, catalog: .bundledForTests, now: now, billingCycleResetDay: 1,
                                                monthlyBudgetDollars: 1000, workingDays: [2, 3, 4, 5, 6],
                                                calendar: calendar)
         XCTAssertEqual(snapshot.monthCost, 21.0, accuracy: 0.0001)

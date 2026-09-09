@@ -19,6 +19,13 @@ jobs:
       - name: Swift version
         run: swift --version
 
+      # docs/pricing.json reaches every installed app on merge, so it is
+      # validated here rather than in the field. Regenerating must be a no-op.
+      - name: Pricing feed is valid and its bundled copy is current
+        run: |
+          bash Scripts/embed_pricing.sh
+          git diff --exit-code Sources/ClaudeCodeUsageKit/Pricing/BundledPricingFeed.swift
+
       - name: Build (app + tests)
         run: swift build --build-tests
 

@@ -13,8 +13,10 @@ struct UsageEntry {
     let cacheWrite5mTokens: Int
     let cacheWrite1hTokens: Int
 
-    var cost: Double {
-        guard let r = Pricing.rates(forModel: model, usedOn: timestamp) else { return 0 }
+    /// Cost under `catalog`, priced at the rates in effect when the usage
+    /// happened. Zero when the catalog doesn't price this model.
+    func cost(using catalog: PricingCatalog) -> Double {
+        guard let r = catalog.rates(forModel: model, usedOn: timestamp) else { return 0 }
         return Double(inputTokens) * r.inputPerToken
             + Double(outputTokens) * r.outputPerToken
             + Double(cacheReadTokens) * r.cacheReadPerToken
