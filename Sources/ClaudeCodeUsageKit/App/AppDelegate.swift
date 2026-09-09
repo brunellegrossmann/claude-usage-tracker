@@ -14,7 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let coordinator = AppCoordinator()
     private let model = UsageModel()
     private let popover = NSPopover()
-    private lazy var settingsWindow = SettingsWindowController(onChange: { [weak self] in self?.coordinator.refresh() })
+    private lazy var settingsWindow = SettingsWindowController(
+        onChange: { [weak self] in self?.coordinator.refresh() },
+        pricingFeed: coordinator.pricingFeed)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

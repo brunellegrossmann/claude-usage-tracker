@@ -7,6 +7,9 @@ import Foundation
 final class AppCoordinator {
     private let scanner: UsageScanning
     private let updateChecker: UpdateChecking
+    /// Owns the published prices. Exposed so Settings can show their provenance
+    /// and offer a manual refresh.
+    let pricingFeed: PricingFeed
     private let workQueue = DispatchQueue(label: "claude-code-usage.scan", qos: .utility)
     private var timer: Timer?
 
@@ -25,15 +28,21 @@ final class AppCoordinator {
     /// release than the running app is available.
     var onUpdateAvailable: ((String) -> Void)?
 
-    init(scanner: UsageScanning = UsageScanner(currentPricingCatalog: { BundledPricingFeed.catalog }),
+    init(pricingFeed: PricingFeed = PricingFeed(),
+         scanner: UsageScanning? = nil,
          updateChecker: UpdateChecking = GitHubReleaseChecker()) {
-        self.scanner = scanner
+        self.pricingFeed = pricingFeed
+        self.scanner = scanner ?? UsageScanner(currentPricingCatalog: { pricingFeed.catalog })
         self.updateChecker = updateChecker
+        // New prices change every number on screen, so re-derive immediately
+        // instead of waiting for the next poll.
+        pricingFeed.onCatalogChanged = { [weak self] _ in self?.refresh() }
     }
 
     /// Does a first scan and starts the repeating timer.
     func start(refreshIntervalSeconds: TimeInterval = 60) {
         refresh()
+        pricingFeed.refreshIfDue()
         checkForUpdateIfDue()
         timer = Timer.scheduledTimer(withTimeInterval: refreshIntervalSeconds, repeats: true) { [weak self] _ in
             self?.refresh()

@@ -11,6 +11,7 @@ import SwiftUI
 /// control is backed by `@State` synced to `Config` so edits redraw the view.
 struct SettingsView: View {
     let onChange: () -> Void
+    let pricingFeed: PricingFeed
 
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var planTier = Config.planTier
@@ -20,6 +21,14 @@ struct SettingsView: View {
     @State private var activeThemeId = Config.activeTierThemeId
     @State private var workingDays = Config.workingDays
     @FocusState private var focusedIconStepId: UUID?
+    @State private var pricingCatalog: PricingCatalog
+    @State private var isRefreshingPrices = false
+
+    init(onChange: @escaping () -> Void, pricingFeed: PricingFeed) {
+        self.onChange = onChange
+        self.pricingFeed = pricingFeed
+        _pricingCatalog = State(initialValue: pricingFeed.catalog)
+    }
 
     /// Weekday chips in Monday-first order (Calendar weekday numbers: 1 = Sunday).
     private let orderedWeekdays: [(number: Int, label: String)] = [
@@ -32,6 +41,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             tierThemeTab
                 .tabItem { Label("Tier Theme", systemImage: "chart.bar.fill") }
+            pricingTab
+                .tabItem { Label("Pricing", systemImage: "tag") }
         }
         .padding(20)
         .frame(width: 440, height: 400)
@@ -187,5 +198,71 @@ struct SettingsView: View {
             Config.tierThemes = newValue
             onChange()
         }
+    }
+
+    // MARK: Pricing
+
+    /// Shows where the rates came from, so numbers never change without a
+    /// visible reason, and lets the user re-check on demand.
+    private var pricingTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(pricingOriginDescription)
+            Text("Published \(pricingCatalog.updatedAt) · schema v\(pricingCatalog.schemaVersion)")
+                .font(.caption).foregroundStyle(.secondary)
+
+            if let source = pricingCatalog.source, let url = URL(string: source) {
+                Link("Anthropic's published rates", destination: url).font(.caption)
+            }
+
+            Divider()
+
+            Text("Rates in USD per million tokens.").font(.caption).foregroundStyle(.secondary)
+            List(pricingCatalog.models, id: \.id) { model in
+                HStack {
+                    Text(model.displayName)
+                    if model.legacy {
+                        Text("legacy").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(currentRateDescription(for: model)).monospacedDigit()
+                }
+            }
+
+            if let failure = pricingFeed.lastFailureReason {
+                Text("Last check failed: \(failure)")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+
+            HStack {
+                Button(isRefreshingPrices ? "Checking…" : "Check for new prices") {
+                    isRefreshingPrices = true
+                    pricingFeed.refreshNow {
+                        pricingCatalog = pricingFeed.catalog
+                        isRefreshingPrices = false
+                    }
+                }
+                .disabled(isRefreshingPrices)
+                Spacer()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var pricingOriginDescription: String {
+        switch pricingCatalog.origin {
+        case .bundled:
+            return "Using the prices shipped with this version."
+        case let .feed(fetchedAt):
+            let stamp = fetchedAt.formatted(date: .abbreviated, time: .shortened)
+            return "Using the published price list, last checked \(stamp)."
+        }
+    }
+
+    /// The rate in effect today, which is what a user is being billed at now.
+    private func currentRateDescription(for model: ModelPricing) -> String {
+        guard let period = model.periods.first(where: { $0.covers(Date()) }) ?? model.periods.first else {
+            return "—"
+        }
+        return String(format: "$%g in / $%g out", period.inputPerMillion, period.outputPerMillion)
     }
 }
