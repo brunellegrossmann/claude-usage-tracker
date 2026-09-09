@@ -131,11 +131,10 @@ routine habit.
 **Updates.** The app tells you when a newer release exists and links to it. It
 never downloads or replaces itself; you install the new version yourself.
 
-Every release zip is also published with an Ed25519 signature
+A release may also carry an Ed25519 signature
 (`Claude-Code-Usage-vX.Y.Z.zip.sig`) made with a key held only by the
-maintainer, so controlling the download server is not enough to forge a build.
-The in-app updater that checks that signature automatically is not shipped yet;
-until it is, `gh attestation verify` above is the check to run.
+maintainer. Nothing verifies it automatically yet, so `gh attestation verify`
+above is the check that matters today.
 
 ## Updates
 

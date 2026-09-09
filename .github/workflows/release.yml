@@ -42,23 +42,28 @@ jobs:
         # extended attributes; `zip` mangles both.
         run: ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
-      - name: Sign the zip with the release key
+      # Best-effort while nothing consumes the signature: the attestation is the
+      # check users actually run today. This becomes required when the in-app
+      # updater ships, since that verifies the signature before installing.
+      - name: Sign the zip with the release key (when configured)
         env:
           RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$RELEASE_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::RELEASE_SIGNING_PRIVATE_KEY is not set. Generate it with" \
-                 "'swift Scripts/release_signing.swift generate' and store it as a repo secret." \
-                 "Unsigned downloads cannot be verified, so the release is refused."
-            exit 1
+            echo "::warning::RELEASE_SIGNING_PRIVATE_KEY is not set; publishing without a signature." \
+                 "Set it up with 'swift Scripts/release_signing.swift generate' (see RELEASING.md)."
+            exit 0
           fi
           swift Scripts/release_signing.swift sign "$ZIP_PATH" > "$ZIP_PATH.sig"
 
-      - name: Checksum
+      - name: Checksum and Homebrew cask
         run: |
           cd "$RUNNER_TEMP"
           shasum -a 256 "$ZIP_NAME" > checksums.txt
           cat checksums.txt
+          SHA256="$(awk '{print $1}' checksums.txt)"
+          bash "$GITHUB_WORKSPACE/Scripts/homebrew_cask.sh" "$VERSION" "$SHA256" \
+            > "$RUNNER_TEMP/claude-code-usage.rb"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
@@ -92,16 +97,19 @@ jobs:
             echo '```'
             echo
             echo "The attestation proves this zip was built by this repo's public workflow from commit \`$GITHUB_SHA\`."
-            echo "\`$ZIP_NAME.sig\` is an Ed25519 signature over the zip, made with a key held only by the maintainer."
+            if [ -f "$ZIP_PATH.sig" ]; then
+              echo
+              echo "\`$ZIP_NAME.sig\` is an Ed25519 signature over the zip, made with a key held only by the maintainer."
+            fi
             echo
             echo "Prefer to build it yourself? \`git clone\` and run \`./install.sh\`."
             echo
             echo "### Changes"
           } > "$NOTES"
+          ASSETS=("$ZIP_PATH" "$RUNNER_TEMP/checksums.txt" "$RUNNER_TEMP/claude-code-usage.rb")
+          [ -f "$ZIP_PATH.sig" ] && ASSETS+=("$ZIP_PATH.sig")
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --notes-file "$NOTES" \
             --generate-notes \
-            "$ZIP_PATH" \
-            "$ZIP_PATH.sig" \
-            "$RUNNER_TEMP/checksums.txt"
+            "${ASSETS[@]}"

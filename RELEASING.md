@@ -5,10 +5,12 @@ No Apple Developer account, certificate, or notarization is involved, and no App
 
 ## One-time setup
 
-### 1. Release signing key
+### 1. Release signing key (optional today)
 
-Every release download is signed with an Ed25519 key, so an attacker who controls the download server cannot forge a build.
-The key is set up now so releases are signed from the first one; the in-app updater that checks the signature automatically ships separately.
+Releases work without this.
+The workflow signs the download when the secret exists and warns and continues when it does not, because nothing verifies the signature yet - the build provenance attestation is the check users actually run.
+Set it up when you want it, and it becomes required once the in-app updater ships, since that verifies the signature before installing.
+
 Generate the key pair once:
 
 ```sh
@@ -70,15 +72,44 @@ A tag that does not increase the version will not be offered as an update.
 | Asset | Purpose |
 |---|---|
 | `Claude-Code-Usage-vX.Y.Z.zip` | The app bundle, ad-hoc signed, not notarized. |
-| `Claude-Code-Usage-vX.Y.Z.zip.sig` | Ed25519 signature over the zip. Checked manually today (`release_signing.swift verify`), and by the in-app updater once it ships. |
+| `Claude-Code-Usage-vX.Y.Z.zip.sig` | Ed25519 signature over the zip. Only present when `RELEASE_SIGNING_PRIVATE_KEY` is set. Checked manually today (`release_signing.swift verify`), and by the in-app updater once it ships. |
+| `claude-code-usage.rb` | The Homebrew cask for this version, ready to copy into the tap. |
 | `checksums.txt` | SHA-256 of the zip, for a manual check. |
 | Build provenance attestation | Sigstore statement that this zip came from this workflow and commit. Not a file: `gh attestation verify` fetches it. |
 
 The checksum alone proves nothing against a compromised release: whoever can replace the zip can replace the checksum.
 The signature and the attestation are the parts that carry weight.
 
+## Homebrew tap
+
+Homebrew can only tap a repo named `homebrew-*`, so the cask lives in a separate repo rather than this one.
+
+One-time:
+
+1. Create a public repo `brunellegrossmann/homebrew-tap`.
+2. Add a `Casks/` directory.
+
+Per release, the workflow attaches the finished cask as `claude-code-usage.rb`:
+
+```sh
+gh release download vX.Y.Z -R brunellegrossmann/claude-usage-tracker -p claude-code-usage.rb
+# then in the tap repo:
+mv claude-code-usage.rb Casks/claude-code-usage.rb
+git commit -am "claude-code-usage vX.Y.Z" && git push
+```
+
+Users then install and, more importantly, **update** with:
+
+```sh
+brew tap brunellegrossmann/tap
+brew install --cask --no-quarantine claude-code-usage
+brew upgrade --cask claude-code-usage
+```
+
+`--no-quarantine` matters: Homebrew quarantines downloaded apps by default, and an unsigned app hits the Gatekeeper dialog without it.
+`brew upgrade` is the update path that needs no in-app updater at all.
+
 ## If the release workflow fails
 
-- **`RELEASE_SIGNING_PRIVATE_KEY is not set`** - the secret is missing. The workflow refuses to publish an unsigned download rather than shipping one the app cannot verify.
 - **Attestation step fails** - the workflow needs `id-token: write` and `attestations: write` permissions, and the repo must be public for the attestation to be publicly verifiable.
 - **Build fails** - fix it on `main` and move the tag; do not hand-edit a published release.
