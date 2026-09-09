@@ -9,6 +9,8 @@ default), a projected month total, and a detailed breakdown.
 🥇 $4.79
 ```
 
+Unofficial. Not affiliated with, endorsed by, or supported by Anthropic.
+
 It works no matter where you run Claude Code — direct terminal, Cursor, IDE
 extension — because every session writes its token usage to
 `~/.claude/projects/**/*.jsonl`, and that is the single source this app reads.
@@ -37,49 +39,117 @@ extension — because every session writes its token usage to
 
 ## Requirements
 
-- macOS 13 (Ventura) or later.
-- Xcode Command Line Tools (for the Swift toolchain): `xcode-select --install`.
+- macOS 13 (Ventura) or later, Apple Silicon or Intel.
+- Nothing else to download the app.
+- To build from source: Xcode Command Line Tools (`xcode-select --install`).
   Unit tests need full Xcode (XCTest isn't in the CLT); `check.sh` skips them
   locally without it and they still run in CI.
 
 ## Install
 
+### Download the app
+
+1. Grab `Claude-Code-Usage-vX.Y.Z.zip` from the
+   [latest release](https://github.com/brunellegrossmann/claude-usage-tracker/releases/latest).
+2. Unzip it and drag **Claude Code Usage.app** to `/Applications`.
+3. First launch: **right-click the app ▸ Open**, then confirm. Or clear the
+   quarantine flag from a terminal:
+
+   ```sh
+   xattr -cr "/Applications/Claude Code Usage.app"
+   ```
+
+macOS blocks that first launch because the app is not signed with an Apple
+Developer ID - see [Is this safe to run?](#is-this-safe-to-run) below, including
+how to verify the download actually came from this repo's CI.
+
+The tier emoji and today's spend appear in your menu bar (e.g. `🥇 $4.79`).
+Turn on **Launch at login** in Settings to have it start with your Mac.
+
+### Or build it yourself
+
+No binary to trust, and no Gatekeeper prompt:
+
 ```sh
-git clone <your-repo-url> claude-code-usage   # or just use this folder
-cd claude-code-usage
+git clone https://github.com/brunellegrossmann/claude-usage-tracker.git
+cd claude-usage-tracker
 ./install.sh
 ```
 
 This compiles the app, installs it to `~/Applications/Claude Code Usage.app`,
 launches it, and registers it to start at login. Re-run `./install.sh` any time
-to rebuild and update.
+to rebuild.
+
+## Is this safe to run?
+
+Honest answers, because the install asks you to skip a macOS protection.
+
+**The app is not signed with an Apple Developer ID and is not notarized.** That
+costs $99/year and this project does not pay it. Ad-hoc signing carries no
+identity, so macOS genuinely cannot tell you who built this. If your policy is
+"no unsigned apps", that policy is correct and you should build from source
+instead.
+
+**You can still verify the download came from this repo's public CI.** Every
+release zip carries a [build provenance
+attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations):
+
+```sh
+gh attestation verify "Claude-Code-Usage-v1.2.0.zip" -R brunellegrossmann/claude-usage-tracker
+```
+
+A pass means this exact zip was produced by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) from a specific
+public commit - not uploaded from someone's laptop. `checksums.txt` in the
+release lets you check the bytes too, though a checksum published next to the
+file it describes proves little on its own.
+
+**Exactly what leaves your machine.** Two requests, both to GitHub, both
+`GET`-only:
+
+| Request | Why |
+|---|---|
+| `api.github.com/repos/.../releases/latest` | Is there a newer version? At most once every 6 hours. |
+| `brunellegrossmann.github.io/.../pricing.json` | Current per-token rates. At most once every 24 hours. |
+
+Nothing is uploaded. No analytics, no crash reporting, no install identifier, no
+telemetry, no cookies. Your prompts, projects, and token counts never leave the
+machine, and the app has no server to send them to.
+
+**What it reads, and what it never asks for.** It reads
+`~/.claude/projects/**/*.jsonl` - your own files in your own home directory -
+plus its settings in `UserDefaults`. That needs no macOS permission prompt: no
+Full Disk Access, no Accessibility, no Keychain, no camera or microphone, no
+listening socket. It writes only its cached price list under
+`~/Library/Application Support/`.
+
+**The `xattr -cr` step.** It removes the quarantine flag macOS puts on
+downloaded files, which is what makes the Gatekeeper dialog appear. It lowers
+your protection for that app. Do it for a build you have verified, not as a
+routine habit.
+
+**Updates.** The app tells you when a newer release exists and links to it. It
+never downloads or replaces itself; you install the new version yourself.
+
+Every release zip is also published with an Ed25519 signature
+(`Claude-Code-Usage-vX.Y.Z.zip.sig`) made with a key held only by the
+maintainer, so controlling the download server is not enough to forge a build.
+The in-app updater that checks that signature automatically is not shipped yet;
+until it is, `gh attestation verify` above is the check to run.
 
 ## Updates
 
 The app checks GitHub for a newer release in the background (at most once every
 6 hours) and, when one exists, shows a **🔔 Update available** banner at the top
-of the popover.
-Clicking it opens the latest release page.
-To update, pull and rebuild:
+of the popover. Clicking it opens the release page.
 
-```sh
-git pull && ./install.sh
-```
+To update, download the new zip and replace the app in `/Applications`, or
+`git pull && ./install.sh` if you build from source. Verify the download first;
+see [Is this safe to run?](#is-this-safe-to-run).
 
 ### Cutting a release (maintainer)
 
-Releases are the version the app compares against, published by the
-`release` GitHub Actions workflow when a `v*` tag is pushed:
-
-```sh
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-The workflow builds the app (proving the tag compiles), stamps the version, and
-publishes a GitHub Release with auto-generated notes.
-No binary is attached - the app is ad-hoc signed, so distribution stays
-build-from-source.
+See [RELEASING.md](RELEASING.md).
 
 ## How it works
 
@@ -158,11 +228,13 @@ Resources/Info.plist   # bundle metadata (LSUIElement = menu-bar only)
 docs/pricing.json      # the published price list (served by GitHub Pages)
 docs/PRICING_FEED.md   # the feed's contract and schema
 Scripts/embed_pricing.sh  # regenerates the bundled copy of docs/pricing.json
+RELEASING.md           # release flow: signing key, tagging, verifying the download
 build.sh               # swift build -c release, then wrap the binary in the .app bundle
 check.sh               # compile gate + swift test (skips tests without Xcode; CI still runs them)
 install.sh             # build + install to ~/Applications + launch
 uninstall.sh           # quit + remove
-.github/workflows/ci.yml  # swift build --build-tests && swift test on push/PR
+.github/workflows/ci.yml       # swift build --build-tests && swift test on push/PR
+.github/workflows/release.yml  # on v* tag: build, zip, sign, attest, publish
 ```
 
 Run `./check.sh` before rebuilding to catch compile errors and test failures early.
