@@ -11,6 +11,10 @@ enum AppRelease {
     /// Page a user is sent to when they click "update available".
     static let releasesPageURL = URL(string: "https://github.com/\(repoSlug)/releases/latest")!
 
+    /// Published pricing feed. Served from the repo's GitHub Pages site (the
+    /// `docs/` folder on `main`), so a price change ships without an app update.
+    static let pricingFeedURL = URL(string: "https://brunellegrossmann.github.io/claude-usage-tracker/pricing.json")!
+
     /// GitHub REST endpoint returning the latest published release as JSON.
     static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/\(repoSlug)/releases/latest")!
 

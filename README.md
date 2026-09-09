@@ -96,32 +96,34 @@ build-from-source.
 
 ### Cost basis
 
-Costs are **token-based dollar estimates** — what your usage would cost at
+Costs are **token-based dollar estimates** - what your usage would cost at
 Anthropic's published per-token API rates. This is the same basis tools like
 `ccusage` use. If you are on a Max/Pro subscription, treat the numbers as a usage
 gauge, not a literal invoice.
 
 ## Prices
 
-Rates live in one file, [`docs/pricing.json`](docs/pricing.json), taken from
-[Anthropic's published API rates](https://claude.com/pricing#api). It is the
-single source of truth: the app's copy is generated from it.
+Rates are not hardcoded into the app you install.
+They are published as a small JSON file and read by the app at most once every 24 hours:
 
-Each usage record is priced at the rate in effect **on its own timestamp**, so an
-announced change ("new rate from 26 Aug") leaves earlier days priced correctly
-instead of retroactively repricing your history.
-
-To change a price:
-
-```sh
-# 1. edit docs/pricing.json (bump "updatedAt", close the old period, open the new one)
-bash Scripts/embed_pricing.sh   # 2. regenerate the app's bundled copy
-./install.sh                    # 3. rebuild
+```
+https://brunellegrossmann.github.io/claude-usage-tracker/pricing.json
 ```
 
-CI validates the feed and fails if the generated copy is stale. Rates outside
-`0 < rate <= 1000` per million tokens, overlapping price periods, and a schema
-version the app doesn't understand are all refused rather than guessed at.
+When Anthropic changes a price, that file changes and every installed app is correct within a day, with no app update and nothing for you to do.
+Settings ▸ Pricing shows which rates are in use, when they were last checked, and a **Check for new prices** button.
+
+What the app promises about that fetch:
+
+- **Fetch only.** A plain conditional `GET`. No body, no cookies, no identifiers, nothing about you or your usage. Nothing is ever uploaded.
+- **Never fatal.** Unreachable, malformed, or tampered-with feed leaves the last known-good prices in place. It cannot zero out or wildly inflate your numbers.
+- **Works offline.** The price list as published at build time is compiled into the app.
+- **Version-pinned.** A feed newer than your app understands is refused, not guessed at.
+
+The contract, the schema, and how to change a price are in [`docs/PRICING_FEED.md`](docs/PRICING_FEED.md).
+Prices come from [Anthropic's published API rates](https://claude.com/pricing#api).
+
+Each usage record is priced at the rate in effect **on its own timestamp**, so an announced change ("new rate from 26 Aug") leaves earlier days priced correctly instead of retroactively repricing your history.
 
 ## Uninstall
 
@@ -145,7 +147,7 @@ Sources/
   ClaudeCodeUsageKit/
     App/            # AppDelegate (status item + popover, AppKit) + AppCoordinator (scan loop, AppKit-free)
     Models/         # UsageEntry, Snapshot, TierTheme — plain data
-    Pricing/        # price catalog: schema, validation, model matching, price periods
+    Pricing/        # published price feed: catalog, validation, 24h refresh, bundled fallback
     Preferences/     # Config — UserDefaults-backed settings
     Services/       # UsageScanner — reads/parses ~/.claude/projects/**/*.jsonl
     ViewModels/      # Tiers, Formatting — pure, unit-tested derivation
@@ -153,8 +155,9 @@ Sources/
 Tests/
   ClaudeCodeUsageKitTests/            # XCTest: pricing, tiers, formatting, scanner parsing/aggregation
 Resources/Info.plist   # bundle metadata (LSUIElement = menu-bar only)
-docs/pricing.json      # the price list; source of truth for every rate
-Scripts/embed_pricing.sh  # regenerates the app's bundled copy of docs/pricing.json
+docs/pricing.json      # the published price list (served by GitHub Pages)
+docs/PRICING_FEED.md   # the feed's contract and schema
+Scripts/embed_pricing.sh  # regenerates the bundled copy of docs/pricing.json
 build.sh               # swift build -c release, then wrap the binary in the .app bundle
 check.sh               # compile gate + swift test (skips tests without Xcode; CI still runs them)
 install.sh             # build + install to ~/Applications + launch
