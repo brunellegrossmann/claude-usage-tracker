@@ -1,14 +1,24 @@
 name: Release
 
-# Publishes a GitHub Release when a version tag is pushed. The release is the
-# version-of-record the app's in-app update check polls; users update by
-# rebuilding from source (git pull && ./install.sh). No binary is attached.
+# Publishes a downloadable, verifiable build when a version tag is pushed.
+#
+# The app is unsigned by Apple (no Developer ID, no notarization), so the trust
+# story rests on two things a free account can provide:
+#   * build provenance attestation - Sigstore proof that this exact zip was
+#     built by this public workflow from this commit, checkable with
+#     `gh attestation verify`.
+#   * an Ed25519 signature over the zip, made with a key held only by the
+#     maintainer, so a build cannot be forged by anyone who merely controls the
+#     download server. The in-app updater verifies it once that ships.
 on:
   push:
     tags: ['v*']
 
 permissions:
   contents: write
+  # Required by actions/attest-build-provenance to mint the Sigstore attestation.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -16,19 +26,90 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build app (proves the tag compiles and stamps the version)
-        run: APP_VERSION="${GITHUB_REF_NAME#v}" ./build.sh
+      - name: Resolve version and artifact names
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "APP_PATH=$RUNNER_TEMP/Claude Code Usage.app" >> "$GITHUB_ENV"
+          echo "ZIP_NAME=Claude-Code-Usage-$GITHUB_REF_NAME.zip" >> "$GITHUB_ENV"
+          echo "ZIP_PATH=$RUNNER_TEMP/Claude-Code-Usage-$GITHUB_REF_NAME.zip" >> "$GITHUB_ENV"
 
-      - name: Create GitHub release (notes only)
+      - name: Build the app bundle (unsigned by Apple, ad-hoc signed)
+        run: APP_VERSION="$VERSION" ./build.sh "$APP_PATH"
+
+      - name: Zip the bundle
+        # ditto --keepParent preserves the .app directory structure and its
+        # extended attributes; `zip` mangles both.
+        run: ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+
+      # Best-effort while nothing consumes the signature: the attestation is the
+      # check users actually run today. This becomes required when the in-app
+      # updater ships, since that verifies the signature before installing.
+      - name: Sign the zip with the release key (when configured)
+        env:
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$RELEASE_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::RELEASE_SIGNING_PRIVATE_KEY is not set; publishing without a signature." \
+                 "Set it up with 'swift Scripts/release_signing.swift generate' (see RELEASING.md)."
+            exit 0
+          fi
+          swift Scripts/release_signing.swift sign "$ZIP_PATH" > "$ZIP_PATH.sig"
+
+      - name: Checksum and Homebrew cask
+        run: |
+          cd "$RUNNER_TEMP"
+          shasum -a 256 "$ZIP_NAME" > checksums.txt
+          cat checksums.txt
+          SHA256="$(awk '{print $1}' checksums.txt)"
+          bash "$GITHUB_WORKSPACE/Scripts/homebrew_cask.sh" "$VERSION" "$SHA256" \
+            > "$RUNNER_TEMP/claude-code-usage.rb"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.ZIP_PATH }}
+
+      - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES_FILE="$(mktemp)"
+          NOTES="$RUNNER_TEMP/notes.md"
           {
-            echo "To update: \`git pull && ./install.sh\`"
+            echo "### Install"
             echo
-          } > "$NOTES_FILE"
+            echo "Download \`$ZIP_NAME\`, unzip it, and move **Claude Code Usage.app** to \`/Applications\`."
+            echo
+            echo "This build is not signed with an Apple Developer ID, so macOS will refuse the first launch."
+            echo "Right-click the app and choose **Open**, or run:"
+            echo
+            echo '```sh'
+            echo "xattr -cr \"/Applications/Claude Code Usage.app\""
+            echo '```'
+            echo
+            echo "That clears the quarantine flag macOS sets on downloads. It removes a protection, so do it only for a build you have verified."
+            echo
+            echo "### Verify this download"
+            echo
+            echo '```sh'
+            echo "gh attestation verify \"$ZIP_NAME\" -R $GITHUB_REPOSITORY"
+            echo "shasum -a 256 -c checksums.txt"
+            echo '```'
+            echo
+            echo "The attestation proves this zip was built by this repo's public workflow from commit \`$GITHUB_SHA\`."
+            if [ -f "$ZIP_PATH.sig" ]; then
+              echo
+              echo "\`$ZIP_NAME.sig\` is an Ed25519 signature over the zip, made with a key held only by the maintainer."
+            fi
+            echo
+            echo "Prefer to build it yourself? \`git clone\` and run \`./install.sh\`."
+            echo
+            echo "### Changes"
+          } > "$NOTES"
+          ASSETS=("$ZIP_PATH" "$RUNNER_TEMP/checksums.txt" "$RUNNER_TEMP/claude-code-usage.rb")
+          [ -f "$ZIP_PATH.sig" ] && ASSETS+=("$ZIP_PATH.sig")
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes-file "$NOTES_FILE" \
-            --generate-notes
+            --notes-file "$NOTES" \
+            --generate-notes \
+            "${ASSETS[@]}"

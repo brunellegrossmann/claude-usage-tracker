@@ -2,3 +2,5 @@
 build/
 .build/
 *.app/
+# Never commit the release signing key, even by accident.
+release-signing-private-key.txt
